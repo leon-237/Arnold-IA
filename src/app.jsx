@@ -196,35 +196,38 @@ function monthName(m) {
 
 // ── API Call (SÉCURISÉ) ───────────────────────────────────────
 async function callArnold(messages, system) {
-  const _key = 'process.env.VITE_ANTHROPIC_API_KEY';
-  if (!_key || _key.trim() === "") {
-    throw new Error("❌ Clé API non configurée dans le code.");
-  }
+  // On récupère la clé API depuis .env
+const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+// Vérification que la clé existe
+if (!apiKey || apiKey.trim() === "") {
+  console.error("API key is missing!");
+}
 
   try {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": _key.trim(),
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        system,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        messages
-      })
-    });
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey.trim(),   // ✅ ici on utilise apiKey
+    "anthropic-version": "2023-06-01"
+  },
+  body: JSON.stringify({
+    model: "claude-3-opus-20240229",
+    max_tokens: 256,
+    messages: [
+      { role: "user", content: "Bonjour Arnold !" }
+    ]
+  }),
+});
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      const errorMsg = errorData.error?.message || `Erreur HTTP ${res.status}`;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.error?.message || `Erreur HTTP ${response.status}`;
       throw new Error(`Erreur API Anthropic: ${errorMsg}`);
     }
 
-    const data = await res.json();
+    const data = await response.json();
     if (data.error) throw new Error(data.error.message || "Erreur API inconnue");
     
     const textContent = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
