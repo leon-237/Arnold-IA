@@ -193,54 +193,38 @@ Pour toute autre question : { "type": "chat", "message": "Réponse" }`;
 function monthName(m) {
   return ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][m-1];
 }
-
-// ── API Call (SÉCURISÉ) ───────────────────────────────────────
+// Nouvelle fonction pour appeler l'API Groq (gratuite)
 async function callArnold(messages, system) {
-  // On récupère la clé API depuis .env
-const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-
-// Vérification que la clé existe
-if (!apiKey || apiKey.trim() === "") {
-  console.error("API key is missing!");
-}
-
   try {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey.trim(),   // ✅ ici on utilise apiKey
-    "anthropic-version": "2023-06-01"
-  },
-  body: JSON.stringify({
-    model: "claude-3-opus-20240229",
-    max_tokens: 256,
-    messages: [
-      { role: "user", content: "Bonjour Arnold !" }
-    ]
-  }),
-});
+    const response = await fetch('/api/groq', {  // ← plus d'URL directe
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 2048,
+        messages: [
+          { role: 'system', content: system },
+          ...messages
+        ]
+      })
+    })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMsg = errorData.error?.message || `Erreur HTTP ${response.status}`;
-      throw new Error(`Erreur API Anthropic: ${errorMsg}`);
+      const errorData = await response.json().catch(() => ({}))
+      const errorMsg = errorData.error?.message || `Erreur HTTP ${response.status}`
+      throw new Error(`Erreur API Groq: ${errorMsg}`)
     }
 
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message || "Erreur API inconnue");
-    
-    const textContent = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-    if (!textContent) throw new Error("Aucune réponse texte reçue de l'API");
-    
-    return textContent;
+    const data = await response.json()
+    const textContent = data.choices?.[0]?.message?.content
+    if (!textContent) throw new Error('Aucune réponse texte')
+    return textContent
   } catch (err) {
-    console.error("Erreur lors de l'appel à l'API:", err);
-    throw err;
+    console.error('Erreur callArnold:', err)
+    throw err
   }
 }
-
-// ── JSON Parser (ROBUSTE) ─────────────────────────────────────
+// ___ json parser (robuste) ______________________
 function parseJSON(raw) {
   if (!raw || typeof raw !== "string") {
     return { type: "chat", message: "Aucune réponse reçue de l'IA." };
@@ -250,6 +234,7 @@ function parseJSON(raw) {
   try {
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     if (cleaned.startsWith("{")) {
+      return JSON.parse(cleaned);
       return JSON.parse(cleaned);
     }
   } catch {
@@ -734,8 +719,6 @@ export default function App() {
   const [adminPrompts, setAdminPrompts] = useState([]);
   const [pName, setPName] = useState("");
   const [pContent, setPContent] = useState("");
-  const [apiKey, setApiKey] = useState(localStorage.getItem("arnold_api_key") || "");
-  const [showApiInput, setShowApiInput] = useState(!apiKey);
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
@@ -752,10 +735,6 @@ export default function App() {
   const send = useCallback(async (override) => {
     const text = override || input.trim();
     if (!text || loading) return;
-    if (!apiKey.trim()) {
-      setShowApiInput(true);
-      return;
-    }
     setInput("");
     setMsgs(prev => [...prev, { role: "user", content: text, parsed: { type: "chat", message: text } }, { role: "typing" }]);
     setLoading(true);
@@ -774,13 +753,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, adminPrompts, agent, tab, fcT1, fcT2, fcMode, apiKey, getHistory]);
-
-  const saveApiKey = (key) => {
-    localStorage.setItem("arnold_api_key", key);
-    setApiKey(key);
-    setShowApiInput(false);
-  };
+  }, [input, loading, adminPrompts, agent, tab, fcT1, fcT2, fcMode, getHistory]);
 
   const launchFC = () => {
     if (!fcT1 || !fcT2) return;
@@ -812,45 +785,6 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
         textarea:focus,input:focus{outline:none} button:active{transform:scale(.97)}
       `}</style>
 
-      {/* API Key Modal */}
-      {showApiInput && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: C.surf, border: `1px solid ${C.bdr}`, borderRadius: 13, padding: 24, maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
-            <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 12, color: C.acc }}>🔐 Clé API Anthropic</h2>
-            <p style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.6 }}>Entrez votre clé API Anthropic pour utiliser ARNOLD. Votre clé sera stockée localement dans le navigateur (localStorage) et ne sera jamais envoyée à un serveur tiers.</p>
-            <input 
-              type="password" 
-              placeholder="sk-ant-..." 
-              defaultValue={apiKey}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  saveApiKey(e.target.value);
-                }
-              }}
-              style={{ width: "100%", padding: "10px 12px", background: "#090c0e", border: `1px solid ${C.bdr}`, borderRadius: 7, color: C.t, fontSize: 12, fontFamily: "'DM Mono', monospace", marginBottom: 12 }}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button 
-                onClick={(e) => {
-                  const input = e.target.parentElement.querySelector("input");
-                  saveApiKey(input.value);
-                }}
-                style={{ flex: 1, padding: "10px", background: "linear-gradient(135deg,#00D4AA,#0077FF)", border: "none", borderRadius: 7, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}
-              >
-                ✓ CONFIRMER
-              </button>
-              <button 
-                onClick={() => setShowApiInput(false)}
-                style={{ flex: 1, padding: "10px", background: "transparent", border: `1px solid ${C.bdr}`, borderRadius: 7, color: C.muted, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}
-              >
-                ✕ ANNULER
-              </button>
-            </div>
-            <p style={{ fontSize: 9, color: "#666", marginTop: 12, textAlign: "center" }}>Vous pouvez obtenir une clé sur <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: C.acc, textDecoration: "none" }}>console.anthropic.com</a></p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <header style={{ height: 52, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.bdr}`, background: "rgba(7,11,13,.98)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -866,9 +800,6 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
               {agI[a]} {a.toUpperCase()}{agent===a && <span style={{ width: 4, height: 4, borderRadius: "50%", background: agC[a], animation: "pulse 1.2s infinite" }} />}
             </button>
           ))}
-          <button onClick={() => setShowApiInput(true)} style={{ padding: "4px 10px", borderRadius: 13, border: `1px solid ${C.bdr}`, background: "transparent", color: C.muted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono', monospace", letterSpacing: 1, display: "flex", alignItems: "center", gap: 4 }}>
-            🔐 CLÉ
-          </button>
         </div>
         <LiveClock />
       </header>
