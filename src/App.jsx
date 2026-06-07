@@ -4,9 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 // ARNOLD FOOTBALL AI v5 — SÉCURISÉ + ROBUSTE
 // ============================================================
 
-const API = "https://api.anthropic.com/v1/messages";
-// Clé intégrée via variable d'environnement Vercel (jamais exposée sur GitHub)
-const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
+// Proxy Vercel — évite les erreurs CORS
+const API = "/api/arnold";
 
 // ── FC Modes ─────────────────────────────────────────────────
 const FC_MODES = {
@@ -327,11 +326,6 @@ function monthName(m) {
 
 // ── API Call (SÉCURISÉ) ───────────────────────────────────────
 async function callArnold(messages, system) {
-  const _key = ANTHROPIC_KEY;
-  if (!_key || _key.trim() === "") {
-    throw new Error("❌ Clé API non configurée. Contacte l'administrateur.");
-  }
-
   const MAX_RETRIES = 3;
   const RETRY_DELAYS = [3000, 8000, 15000]; // 3s, 8s, 15s
 
@@ -340,9 +334,7 @@ async function callArnold(messages, system) {
       const res = await fetch(API, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "x-api-key": _key.trim(),
-          "anthropic-version": "2023-06-01"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
