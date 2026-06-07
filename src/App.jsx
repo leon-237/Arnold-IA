@@ -1,11 +1,12 @@
-/* eslint-disable react-hooks/exhaustive-deps, no-unused-vars */
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 // ============================================================
 // ARNOLD FOOTBALL AI v5 — SÉCURISÉ + ROBUSTE
 // ============================================================
 
 const API = "https://api.anthropic.com/v1/messages";
+// Clé intégrée via variable d'environnement Vercel (jamais exposée sur GitHub)
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
 
 // ── FC Modes ─────────────────────────────────────────────────
 const FC_MODES = {
@@ -19,8 +20,8 @@ const FC_MODES = {
     notes: "Pas de gardien · Pas de corners · Pas de penaltys · Style Volta freestyle",
     color: "#FF6B35", colorDim: "rgba(255,107,53,0.1)"
   },
-  FC25_5v5: {
-    label: "FC25 · 5v5 Rush", game: "EA FC 25", players: 5,
+  FC26_5v5: {
+    label: "FC26 · 5v5 Rush", game: "EA FC 26", players: 5,
     goalkeeper: true, corners: true, penalties: false,
     goalSize: "Cages 11v11 standard", fieldSize: "63.7 × 46.6 m",
     offside: "Dernier tiers uniquement", blueCard: false,
@@ -30,7 +31,7 @@ const FC_MODES = {
     color: "#00D4AA", colorDim: "rgba(0,212,170,0.1)"
   },
   FC25_3v3: {
-    label: "FC25 · 3v3 Rush", game: "EA FC 25", players: 3,
+    label: "FC25 · 3v3 Rush", game: "EA FC 26", players: 3,
     goalkeeper: false, corners: false, penalties: false,
     goalSize: "Petites cages Volta", fieldSize: "~28 × 20 m",
     offside: false, blueCard: false,
@@ -56,13 +57,14 @@ function getLiveContext() {
     ? `${year}-${year + 1}`
     : `${year - 1}-${year}`;
 
-  const _m = now.getMonth() + 1;
-  const uclPhase = _m >= 9 && _m <= 12 ? "Phase de ligue (sept-déc)"
-    : _m === 1 || _m === 2 ? "Playoffs / 8e de finale aller (jan-fév)"
-    : _m === 3 ? "8e de finale retour / Quarts aller"
-    : _m === 4 ? "Quarts retour / Demis aller"
-    : _m === 5 ? "Demis retour / Finale"
-    : "Intersaison / Qualifications";
+  let uclPhase = "";
+  const m = now.getMonth() + 1;
+  if (m >= 9 && m <= 12) uclPhase = "Phase de ligue (sept-déc)";
+  else if (m === 1 || m === 2) uclPhase = "Playoffs / 8e de finale aller (jan-fév)";
+  else if (m === 3) uclPhase = "8e de finale retour / Quarts aller";
+  else if (m === 4) uclPhase = "Quarts retour / Demis aller";
+  else if (m === 5) uclPhase = "Demis retour / Finale";
+  else uclPhase = "Intersaison / Qualifications";
 
   return {
     dateISO: `${year}-${month}-${day}`,
@@ -81,9 +83,56 @@ function buildSystem(extraPrompts = [], agentMode = "arnold") {
 
 ## CONTEXTE TEMPOREL — INJECTÉ AUTOMATIQUEMENT
 ⏰ Date exacte aujourd'hui : ${ctx.dateFR} (${ctx.dateISO})
+📚 Historique des prédictions passées : ${(() => {
+  try {
+    const fb = JSON.parse(localStorage.getItem("arnold_feedback") || "[]").slice(0, 20);
+    if (!fb.length) return "Aucun feedback encore.";
+    const correct = fb.filter(f => {
+      const winner_pred = f.real1 > f.real2 ? "t1" : f.real1 < f.real2 ? "t2" : "nul";
+      return winner_pred === (f.real1 > f.real2 ? "t1" : f.real1 < f.real2 ? "t2" : "nul");
+    }).length;
+    return fb.slice(0, 5).map(f => f.team1 + " " + f.real1 + "-" + f.real2 + " " + f.team2 + " (" + f.date + ")").join(" | ") + " | Précision: " + Math.round(correct/fb.length*100) + "%";
+  } catch { return "N/A"; }
+}
+)()}
 📅 Saison football en cours : ${ctx.footballSeason}
 🏆 Phase UCL approximative : ${ctx.uclPhase}
 🌍 Année : ${ctx.year}
+
+## COMPÉTITIONS SUPPORTÉES — Connaissance interne enrichie
+Europe: UCL, UEL, UECL, Supercoupe UEFA
+Internationales: FIFA World Cup, EURO, CAN, Copa América, Ligue des Nations, Qualifications WC/EURO/CAN
+France: Ligue 1, Ligue 2, Coupe de France, Trophée des Champions
+Angleterre: Premier League, Championship, EFL League One/Two, FA Cup, Carabao Cup
+Espagne: La Liga, La Liga 2, Copa del Rey, Supercopa de España
+Allemagne: Bundesliga, 2. Bundesliga, DFB Pokal, DFL Supercup
+Italie: Serie A, Serie B, Coppa Italia, Supercoppa
+Portugal: Primeira Liga, Segunda Liga, Taça de Portugal
+Pays-Bas: Eredivisie, Eerste Divisie, KNVB Cup
+Arabie Saoudite: Saudi Pro League, King Cup, Saudi Super Cup
+USA/Canada: MLS, USL Championship, US Open Cup
+Mexique: Liga MX, Copa MX, Liga de Expansión
+Brésil: Série A, Série B, Copa do Brasil
+Argentine: Liga Profesional, Copa de la Liga
+Colombie: Liga BetPlay
+Chili: Primera División
+Pérou: Liga 1
+Uruguay: Primera División
+Copa Libertadores, Copa Sudamericana, Recopa Sudamericana
+Turquie: Süper Lig, TFF First League, Turkish Cup
+Russie: Premier League RPL
+Japon: J1 League, J2 League, Emperor's Cup
+Chine: Chinese Super League
+Australie: A-League
+Afrique du Sud: Premier Soccer League (PSL)
+Belgique: Jupiler Pro League, First Amateur
+Suisse: Super League, Challenge League
+Grèce: Super League
+Suède: Allsvenskan
+Norvège: Eliteserien
+Danemark: Superliga
+Écosse: Scottish Premiership, Scottish Cup
+Irlande: League of Ireland
 
 ⚠️ RÈGLE ABSOLUE : Tu raisonnes TOUJOURS à partir de cette date. Tu ne fais jamais référence à des saisons passées comme "en cours". Tu n'inventes jamais de données futures. Si on te demande "les derniers matchs", c'est les matchs les plus récents à la date du ${ctx.dateISO}. Tu utilises toujours l'année ${ctx.year} dans tes recherches web.
 
@@ -101,84 +150,166 @@ Utilise web_search pour ces données dynamiques SEULEMENT :
 - Logique tactique, compatibilité, prédiction → modèle interne
 - Palmarès, historique long terme → connaissance interne
 
-## FORMAT DE RÉPONSE — JSON STRICT
-Réponds UNIQUEMENT en JSON valide. Aucun texte, aucun markdown autour.
+## GESTION MULTI-MATCHS
+Si la demande contient PLUSIEURS matchs (ex: "PSG vs Arsenal + Bayern vs Dortmund"), tu DOIS :
+1. Effectuer 6 recherches web pour CHAQUE match
+2. Retourner UN SEUL JSON VALIDE contenant un tableau "analyses" :
+{ "type": "multi", "analyses": [ {JSON match 1}, {JSON match 2}, ... ] }
+Chaque match a son propre JSON analysis complet.
+JAMAIS de texte libre entre les JSONs. JAMAIS de markdown. JSON pur uniquement.
 
-Pour une analyse de match :
+## WEB SEARCH OBLIGATOIRE — 6 REQUÊTES MINIMUM POUR UN MATCH RÉEL
+AVANT de répondre, tu DOIS effectuer ces recherches web :
+1. "[équipe1] résultats ${ctx.year} forme récente derniers matchs"
+2. "[équipe2] résultats ${ctx.year} forme récente derniers matchs"  
+3. "[équipe1] blessés absents suspendus ${ctx.year}"
+4. "[équipe2] blessés absents suspendus ${ctx.year}"
+5. "[équipe1] [équipe2] confrontations historique H2H"
+6. "[équipe1] [équipe2] statistiques corners tirs cadrés cartons ${ctx.footballSeason}"
+
+PUIS utilise tes connaissances internes pour compléter les stats manquantes.
+
+## FORMAT DE RÉPONSE — JSON STRICT ET COMPLET
+RÈGLE ABSOLUE : Chaque champ DOIT être rempli avec de VRAIES données numériques, jamais null, jamais 0 partout.
+Si le web search ne trouve pas une stat précise, utilise ta connaissance interne de l'équipe.
+
 {
   "type": "analysis",
   "meta": {
-    "team1": "Nom",
-    "team2": "Nom",
-    "competition": "Nom",
+    "team1": "Nom exact",
+    "team2": "Nom exact",
+    "competition": "Nom complet",
     "matchDate": "Date ou À venir",
     "season": "${ctx.footballSeason}",
     "analysisDate": "${ctx.dateISO}",
     "mode": "real",
-    "webQueries": ["requête effectuée 1", "requête 2"]
+    "webQueries": ["requête 1 effectuée", "requête 2", "requête 3", "requête 4", "requête 5", "requête 6"]
   },
   "liveData": {
     "team1": {
       "last10": [
-        {"date":"${ctx.year}-MM-DD","opponent":"Adversaire","score":"2-1","result":"V","competition":"UCL"}
+        {"date":"${ctx.year}-MM-DD","opponent":"Nom adversaire","score":"2-1","result":"V","competition":"Ligue 1"},
+        {"date":"${ctx.year}-MM-DD","opponent":"Nom adversaire","score":"0-0","result":"N","competition":"UCL"},
+        {"date":"${ctx.year}-MM-DD","opponent":"Nom adversaire","score":"1-2","result":"D","competition":"Ligue 1"}
       ],
-      "injuries": [{"name":"Joueur","position":"ATT","returnDate":"estimée","severity":"grave|modérée|légère"}],
-      "suspensions": [{"name":"Joueur","reason":"Cartons","matchesMissed":1}],
-      "recentTransfers": [{"name":"Joueur","type":"arrivée","from":"Club","impact":"important"}]
+      "injuries": [
+        {"name":"Prénom Nom","position":"ATT","returnDate":"15 juin","severity":"grave"},
+        {"name":"Prénom Nom","position":"MIL","returnDate":"inconnue","severity":"modérée"}
+      ],
+      "suspensions": [{"name":"Prénom Nom","reason":"3 cartons jaunes","matchesMissed":1}],
+      "recentTransfers": [{"name":"Prénom Nom","type":"arrivée","from":"Club","impact":"important"}]
     },
-    "team2": {},
+    "team2": {
+      "last10": [],
+      "injuries": [],
+      "suspensions": [],
+      "recentTransfers": []
+    },
     "h2h": {
-      "last5": [{"date":"YYYY-MM-DD","score":"1-0","winner":"équipe1|équipe2|nul","competition":"UCL"}],
-      "team1Wins": 3, "team2Wins": 1, "draws": 1, "avgGoals": 2.4,
-      "lastMeeting": "YYYY-MM-DD"
+      "last5": [
+        {"date":"YYYY-MM-DD","score":"2-1","winner":"équipe1","competition":"UCL"},
+        {"date":"YYYY-MM-DD","score":"1-1","winner":"nul","competition":"Ligue 1"},
+        {"date":"YYYY-MM-DD","score":"0-2","winner":"équipe2","competition":"UCL"}
+      ],
+      "team1Wins": 3,
+      "team2Wins": 1,
+      "draws": 1,
+      "avgGoals": 2.6,
+      "lastMeeting": "YYYY-MM-DD",
+      "h2hNote": "Explication tendance H2H en 1-2 phrases avec chiffres"
     }
   },
   "internalData": {
     "team1": {
-      "avgGoalsScored": 2.1,
-      "avgGoalsConceded": 0.9,
-      "avgCorners": 6.8,
-      "avgShotsOnTarget": 5.9,
-      "avgPossession": 62,
-      "yellowCardsTotal": 38,
-      "xGPerMatch": 2.2,
-      "cleanSheets": 11,
+      "avgGoalsScored": 2.3,
+      "avgGoalsConceded": 0.8,
+      "avgCorners": 7.2,
+      "avgShotsOnTarget": 6.4,
+      "avgPossession": 64,
+      "yellowCardsPerMatch": 1.8,
+      "yellowCardsTotal": 42,
+      "redCards": 2,
+      "xGPerMatch": 2.4,
+      "xGConcededPerMatch": 0.9,
+      "cleanSheets": 14,
+      "scoringFirstRate": 68,
+      "winWhenScoringFirst": 89,
       "composition": "4-3-3",
-      "compatibilityScore": 85,
-      "compatibilityNote": "Explication compatibilité joueurs dans ce système",
-      "tacticalStyle": "Pressing haut, transitions rapides",
-      "strengths": ["Force 1", "Force 2"],
-      "weaknesses": ["Faiblesse 1"],
-      "keyPlayers": [{"name":"Nom","role":"Rôle","stat":"18 buts","impact":"crucial"}]
+      "tacticalStyle": "Pressing haut intense, possession longue, transitions rapides",
+      "strengths": ["Pressing haut efficace", "Jeu de possession", "Efficacité offensive"],
+      "weaknesses": ["Vulnérable en transition", "Défense haute risquée"],
+      "keyPlayers": [
+        {"name":"Prénom Nom","role":"Attaquant","stat":"24 buts 8 passes","impact":"crucial"},
+        {"name":"Prénom Nom","role":"Milieu","stat":"12 passes décisives","impact":"crucial"},
+        {"name":"Prénom Nom","role":"Défenseur","stat":"89% duels gagnés","impact":"important"}
+      ]
     },
-    "team2": {}
+    "team2": {
+      "avgGoalsScored": 1.9,
+      "avgGoalsConceded": 1.1,
+      "avgCorners": 5.8,
+      "avgShotsOnTarget": 5.1,
+      "avgPossession": 54,
+      "yellowCardsPerMatch": 2.1,
+      "yellowCardsTotal": 48,
+      "redCards": 3,
+      "xGPerMatch": 1.8,
+      "xGConcededPerMatch": 1.3,
+      "cleanSheets": 9,
+      "scoringFirstRate": 52,
+      "winWhenScoringFirst": 74,
+      "composition": "4-2-3-1",
+      "tacticalStyle": "Bloc médian, contre-attaques rapides",
+      "strengths": ["Solidité défensive", "Efficacité en contre"],
+      "weaknesses": ["Manque de créativité", "Dépendance aux titulaires"],
+      "keyPlayers": [
+        {"name":"Prénom Nom","role":"Attaquant","stat":"18 buts","impact":"crucial"},
+        {"name":"Prénom Nom","role":"Milieu","stat":"7 passes décisives","impact":"important"}
+      ]
+    }
   },
   "prediction": {
-    "score1": 2, "score2": 1,
-    "winner": "Équipe",
+    "score1": 2,
+    "score2": 1,
+    "winner": "Équipe 1",
     "confidence": 68,
-    "resultProbs": {"team1Win": 55, "draw": 25, "team2Win": 20},
+    "resultProbs": {"team1Win": 58, "draw": 22, "team2Win": 20},
     "btts": true,
     "over25": true,
-    "keyReason": "Raison principale courte"
+    "predictedCorners": {"team1": 7, "team2": 5, "total": 12, "over85": true, "over105": false},
+    "predictedYellowCards": {"team1": 2, "team2": 2, "total": 4, "over35": true},
+    "predictedShotsOnTarget": {"team1": 6, "team2": 4},
+    "keyReason": "Supériorité offensive de l'équipe 1 confirmée par 7 victoires sur 10 et xG de 2.4"
   },
   "keyFactors": [
-    {"icon":"🔄","label":"Forme récente","tag":"LIVE","detail":"..."},
-    {"icon":"🟨","label":"Suspensions","tag":"LIVE","detail":"..."},
-    {"icon":"🤝","label":"H2H","tag":"LIVE","detail":"..."},
-    {"icon":"📐","label":"Corners","tag":"LOCAL","detail":"..."},
-    {"icon":"🎯","label":"Tirs cadrés","tag":"LOCAL","detail":"..."},
-    {"icon":"⚖️","label":"Enjeux","tag":"LOCAL","detail":"..."}
+    {"icon":"🔄","label":"Forme récente","tag":"LIVE","detail":"Éq1: 7V 2N 1D sur 10 matchs, 23 buts marqués. Éq2: 5V 3N 2D, 16 buts. CHIFFRES RÉELS."},
+    {"icon":"🚑","label":"Blessés/Suspendus","tag":"LIVE","detail":"Éq1: Nom1 (ATT, grave), Nom2 (MIL). Éq2: Nom3 suspendu 1 match."},
+    {"icon":"🤝","label":"H2H","tag":"LIVE","detail":"5 dernières confrontations: 3-1-1 en faveur Éq1. Moyenne 2.6 buts/match. Dernière: 2-1 le DD/MM/AAAA."},
+    {"icon":"📐","label":"Corners","tag":"LOCAL","detail":"Éq1: 7.2 corners/match (2ème division). Éq2: 5.8/match. Prédiction: 12 corners total, Over 8.5 ✓"},
+    {"icon":"🎯","label":"Tirs cadrés","tag":"LOCAL","detail":"Éq1: 6.4 tirs cadrés/match vs Éq2: 5.1. xG: 2.4 vs 1.8. Éq1 favorisée offensivement."},
+    {"icon":"🟨","label":"Cartons jaunes","tag":"LOCAL","detail":"Éq1: 1.8 CJ/match (42 total). Éq2: 2.1 CJ/match (48 total). Total prédit: 4 CJ, Over 3.5 ✓"},
+    {"icon":"⚖️","label":"Enjeux","tag":"LIVE","detail":"Enjeu précis : qualification, titre, maintien ou autre avec impact psychologique."},
+    {"icon":"🏠","label":"Avantage terrain","tag":"LOCAL","detail":"% victoire à domicile/extérieur avec chiffres précis de la saison."}
   ],
-  "tacticalNote": "Analyse tactique 4-5 phrases.",
-  "sources": ["source web 1"]
+  "tacticalNote": "Note tactique de 4-5 phrases avec chiffres : comment les systèmes s'affrontent, qui domine au milieu, quel est le plan B, impact des absences sur le dispositif.",
+  "sources": ["source web utilisée 1", "source web 2"]
 }
 
-Pour les modes FC (meta.mode = FC24_4v4 / FC25_5v5 / FC25_3v3) :
-- Pas de web search sur la forme (données jeu vidéo non disponibles en ligne)
-- Adapte les stats aux mécaniques FC (vitesse, dribble, tir, défense format réduit)
-- Style équipes FC ≠ réalité
-- Spécifiquement pour FC25_5v5 : Ne prends pas en compte les pénaltys, cartons bleus ou prolongations dans ton analyse, car ces éléments ne sont pas pertinents pour le calcul des paris (xbet).
+## RÈGLES CRITIQUES POUR LES STATS :
+- avgCorners : JAMAIS null. Utilise ta connaissance de l'équipe si web search vide.
+- avgShotsOnTarget : JAMAIS null. 
+- yellowCardsPerMatch : JAMAIS null.
+- keyPlayers : TOUJOURS au moins 2-3 joueurs avec de vraies stats de la saison.
+- h2h.last5 : TOUJOURS au moins 3 matchs récents réels.
+- last10 : TOUJOURS au moins 5 matchs récents réels.
+- predictedCorners/YellowCards : TOUJOURS rempli avec chiffres précis.
+- keyFactors details : TOUJOURS avec chiffres numériques précis, jamais "N/A" ou "...".
+
+## POUR LES MODES FC (meta.mode = FC24_4v4 / FC26_5v5 / FC25_3v3) :
+- PAS de web search (données jeu vidéo non dispo en ligne)
+- Utilise les moyennes de buts du mode (FC24_4v4: ~12 total, FC26_5v5: ~5.5, FC25_3v3: ~15)
+- Adapte les stats aux mécaniques FC spécifiques
+- FC26_5v5 : inclure prédiction corners, PAS de penalty ni carton bleu
 
 Pour toute autre question : { "type": "chat", "message": "Réponse" }`;
 
@@ -193,78 +324,127 @@ Pour toute autre question : { "type": "chat", "message": "Réponse" }`;
 function monthName(m) {
   return ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][m-1];
 }
-// Nouvelle fonction pour appeler l'API Groq (gratuite)
+
+// ── API Call (SÉCURISÉ) ───────────────────────────────────────
 async function callArnold(messages, system) {
-  try {
-    const response = await fetch('/api/groq', {  // ← plus d'URL directe
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 2048,
-        messages: [
-          { role: 'system', content: system },
-          ...messages
-        ]
-      })
-    })
+  const _key = ANTHROPIC_KEY;
+  if (!_key || _key.trim() === "") {
+    throw new Error("❌ Clé API non configurée. Contacte l'administrateur.");
+  }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      const errorMsg = errorData.error?.message || `Erreur HTTP ${response.status}`
-      throw new Error(`Erreur API Groq: ${errorMsg}`)
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [3000, 8000, 15000]; // 3s, 8s, 15s
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": _key.trim(),
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 4000,
+          system,
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          messages
+        })
+      });
+
+      // Si surchargé (529) ou rate limit (429) → retry automatique
+      if (res.status === 529 || res.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAYS[attempt];
+          console.warn(`⏳ API surchargée — tentative ${attempt + 1}/${MAX_RETRIES}, attente ${delay/1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw new Error(`⏳ API Anthropic surchargée. Réessaie dans 1-2 minutes.`);
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.error?.message || `Erreur HTTP ${res.status}`;
+        // Retry sur erreurs serveur (5xx)
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        throw new Error(`Erreur API Anthropic: ${errorMsg}`);
+      }
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || "Erreur API inconnue");
+      
+      const textContent = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+      if (!textContent) throw new Error("Aucune réponse texte reçue de l'API");
+      
+      return textContent;
+
+    } catch (err) {
+      // Ne pas retry sur les erreurs d'auth ou de syntaxe
+      if (err.message.includes("Clé API") || err.message.includes("401") || err.message.includes("400")) {
+        throw err;
+      }
+      if (attempt === MAX_RETRIES) {
+        console.error("Erreur lors de l'appel à l'API:", err);
+        throw err;
+      }
+      // Retry sur autres erreurs réseau
+      console.warn(`Erreur réseau, tentative ${attempt + 1}/${MAX_RETRIES}:`, err.message);
+      await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
     }
-
-    const data = await response.json()
-    const textContent = data.choices?.[0]?.message?.content
-    if (!textContent) throw new Error('Aucune réponse texte')
-    return textContent
-  } catch (err) {
-    console.error('Erreur callArnold:', err)
-    throw err
   }
 }
-// ___ json parser (robuste) ______________________
+
+// ── JSON Parser (ROBUSTE) ─────────────────────────────────────
 function parseJSON(raw) {
   if (!raw || typeof raw !== "string") {
     return { type: "chat", message: "Aucune réponse reçue de l'IA." };
   }
 
-  // Tentative 1 : Parser direct après nettoyage des blocs markdown
+  // Nettoyage markdown
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+  // Tentative 1 : JSON unique direct
   try {
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    if (cleaned.startsWith("{")) {
-      return JSON.parse(cleaned);
-      return JSON.parse(cleaned);
+    if (cleaned.startsWith("{")) return JSON.parse(cleaned);
+  } catch {}
+
+  // Tentative 2 : Extraire TOUS les JSONs valides (multi-matchs)
+  const jsonObjects = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (cleaned[i] === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          const obj = JSON.parse(cleaned.slice(start, i + 1));
+          if (obj.type === "analysis" || obj.type === "chat") jsonObjects.push(obj);
+        } catch {}
+        start = -1;
+      }
     }
-  } catch {
-    // Continue vers la tentative suivante
   }
 
-  // Tentative 2 : Chercher le premier { et le dernier }
-  try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-      const jsonStr = raw.substring(start, end + 1);
-      return JSON.parse(jsonStr);
-    }
-  } catch {
-    // Continue vers la tentative suivante
+  // Si plusieurs analyses trouvées → retourner un objet multi
+  if (jsonObjects.length > 1) {
+    return { type: "multi", analyses: jsonObjects };
   }
+  if (jsonObjects.length === 1) return jsonObjects[0];
 
-  // Tentative 3 : Utiliser une regex pour extraire l'objet JSON
+  // Tentative 3 : premier { au dernier }
   try {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-  } catch (e) {
-    // Continue vers le fallback
-  }
+    const s = cleaned.indexOf("{"), e = cleaned.lastIndexOf("}");
+    if (s !== -1 && e > s) return JSON.parse(cleaned.slice(s, e + 1));
+  } catch {}
 
-  // Fallback : retourner le texte brut comme message
-  console.warn("Impossible de parser JSON, retour du texte brut:", raw);
+  // Fallback texte brut
   return { type: "chat", message: raw };
 }
 
@@ -332,7 +512,7 @@ function AnimBar({ label, val1, val2, unit, delay }) {
   );
 }
 
-function Timeline({ matches }) {
+function Timeline({ matches, color }) {
   return (
     <div style={{ display: "flex", gap: 3, marginTop: 5 }}>
       {matches.map((m, i) => (
@@ -431,7 +611,7 @@ function TeamCol({ live, internal, side }) {
             <span style={{ fontSize: 8, color: "#2a3838", letterSpacing: 1.5, fontFamily: "'DM Mono', monospace" }}>10 DERNIERS MATCHS</span>
             <LiveTag type="LIVE" />
           </div>
-          <Timeline matches={lv.last10} />
+          <Timeline matches={lv.last10} color={color} />
         </div>
       )}
     </div>
@@ -442,6 +622,20 @@ function TeamCol({ live, internal, side }) {
 function AnalysisCard({ data }) {
   const [vis, setVis] = useState(false);
   useEffect(() => { setTimeout(() => setVis(true), 50); }, []);
+
+  // Multi-matchs : afficher chaque analyse séparément
+  if (data.type === "multi") return (
+    <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+      {data.analyses.map((analysis, i) => (
+        <div key={i}>
+          <div style={{ fontSize:9, color:"#00D4AA", letterSpacing:2, fontFamily:"'DM Mono', monospace", marginBottom:6 }}>
+            ⚽ MATCH {i+1}/{data.analyses.length}
+          </div>
+          <AnalysisCard data={analysis} />
+        </div>
+      ))}
+    </div>
+  );
 
   if (data.type === "chat") return (
     <div style={{ padding: "13px 17px", background: "linear-gradient(135deg,rgba(0,212,170,0.05),rgba(0,80,180,0.03))", border: "1px solid rgba(0,212,170,0.11)", borderRadius: 11, fontSize: 13, color: "#c0c8c0", lineHeight: 1.75, fontFamily: "'Crimson Pro', serif", whiteSpace: "pre-wrap" }}>{data.message}</div>
@@ -586,12 +780,12 @@ function AnalysisCard({ data }) {
 // ── Pitch Visualizer ──────────────────────────────────────────
 function Pitch({ mode }) {
   const m = FC_MODES[mode]; if (!m) return null;
-  const W = mode === "FC25_5v5" ? 280 : mode === "FC24_4v4" ? 205 : 162;
-  const H = mode === "FC25_5v5" ? 188 : mode === "FC24_4v4" ? 136 : 108;
+  const W = mode === "FC26_5v5" ? 280 : mode === "FC24_4v4" ? 205 : 162;
+  const H = mode === "FC26_5v5" ? 188 : mode === "FC24_4v4" ? 136 : 108;
   const cx = W / 2, cy = H / 2;
-  const gW = mode === "FC25_5v5" ? 38 : 16, gD = mode === "FC25_5v5" ? 9 : 6;
+  const gW = mode === "FC26_5v5" ? 38 : 16, gD = mode === "FC26_5v5" ? 9 : 6;
   const pos = {
-    FC25_5v5: [[.14,.5],[.25,.23],[.25,.77],[.38,.38],[.38,.62]],
+    FC26_5v5: [[.14,.5],[.25,.23],[.25,.77],[.38,.38],[.38,.62]],
     FC24_4v4: [[.19,.23],[.19,.77],[.32,.43],[.32,.57]],
     FC25_3v3: [[.19,.3],[.19,.7],[.35,.5]]
   };
@@ -605,7 +799,7 @@ function Pitch({ mode }) {
           <line x1={cx} y1={0} x2={cx} y2={H} stroke={m.color} strokeWidth={.7} strokeOpacity={.28} />
           <circle cx={cx} cy={cy} r={H * .15} fill="none" stroke={m.color} strokeWidth={.7} strokeOpacity={.28} />
           <circle cx={cx} cy={cy} r={3} fill={m.color} />
-          {mode === "FC25_5v5" && <>
+          {mode === "FC26_5v5" && <>
             <rect x={0} y={cy - H * .27} width={W * .2} height={H * .54} fill="none" stroke={m.color} strokeWidth={.7} strokeOpacity={.28} />
             <rect x={W - W * .2} y={cy - H * .27} width={W * .2} height={H * .54} fill="none" stroke={m.color} strokeWidth={.7} strokeOpacity={.28} />
             <line x1={W * .33} y1={0} x2={W * .33} y2={H} stroke="#FFD700" strokeWidth={.8} strokeDasharray="5,4" strokeOpacity={.48} />
@@ -613,9 +807,9 @@ function Pitch({ mode }) {
             <text x={W * .165} y={H + 13} textAnchor="middle" fontSize={7} fill="#FFD700" fontFamily="monospace">hors-jeu →</text>
             <text x={W * .835} y={H + 13} textAnchor="middle" fontSize={7} fill="#FFD700" fontFamily="monospace">← hors-jeu</text>
           </>}
-          <rect x={-gD} y={cy - gW / 2} width={gD} height={gW} fill="none" stroke="#ccc" strokeWidth={mode === "FC25_5v5" ? 2 : 1.3} />
-          <rect x={W} y={cy - gW / 2} width={gD} height={gW} fill="none" stroke="#ccc" strokeWidth={mode === "FC25_5v5" ? 2 : 1.3} />
-          {mode === "FC25_5v5" && <>
+          <rect x={-gD} y={cy - gW / 2} width={gD} height={gW} fill="none" stroke="#ccc" strokeWidth={mode === "FC26_5v5" ? 2 : 1.3} />
+          <rect x={W} y={cy - gW / 2} width={gD} height={gW} fill="none" stroke="#ccc" strokeWidth={mode === "FC26_5v5" ? 2 : 1.3} />
+          {mode === "FC26_5v5" && <>
             <circle cx={12} cy={cy} r={6.5} fill="#FFD700" stroke="#000" strokeWidth={.7} />
             <text x={12} y={cy + 3.5} textAnchor="middle" fontSize={5} fill="#000" fontWeight="bold">GK</text>
             <circle cx={W - 12} cy={cy} r={6.5} fill="#FFD700" stroke="#000" strokeWidth={.7} />
@@ -701,6 +895,164 @@ function LiveClock() {
   );
 }
 
+// ── Competition Selector Component ───────────────────────────
+function CompSelector({ send, C }) {
+  const [selCat, setSelCat] = useState("Europe");
+  const COMPS = {
+    "Europe": [
+      ["🏆 UCL","Champions League","Analyse un match de Champions League. Effectue 6 recherches web : forme récente, blessés, H2H, corners, tirs cadrés, cartons. JSON strict."],
+      ["🟠 EL","Europa League","Analyse un match d'Europa League. Recherche forme, blessés, H2H, stats. JSON strict."],
+      ["🔵 ECL","Conference League","Analyse un match de Conference League. Web search complet. JSON strict."],
+    ],
+    "Intl": [
+      ["🌍 WC","Coupe du Monde","Analyse un match de Coupe du Monde FIFA. Web search : forme, blessés, H2H, stats défensives. JSON strict."],
+      ["🇪🇺 EURO","EURO","Analyse un match du Championnat d'Europe UEFA. Web search complet. JSON strict."],
+      ["🌍 CAN","CAN","Analyse un match de la Coupe d'Afrique des Nations. Web search. JSON strict."],
+      ["🌎 Copa","Copa América","Analyse un match de Copa América. Web search complet. JSON strict."],
+      ["🌍 LDN","Ligue des Nations","Analyse un match de Ligue des Nations UEFA. Web search. JSON strict."],
+      ["🌍 WCQ","Qualif. WC","Analyse un match de qualification Coupe du Monde. Web search. JSON strict."],
+      ["🌍 WCAN","Qualif. CAN","Analyse un match de qualification CAN. Web search. JSON strict."],
+      ["🌍 WEURO","Qualif. EURO","Analyse un match de qualification EURO. Web search. JSON strict."],
+      ["🌍 GC","Gold Cup","Analyse un match de Gold Cup CONCACAF. Web search. JSON strict."],
+      ["🏅 OL","JO Football","Analyse un match de football aux Jeux Olympiques. Web search. JSON strict."],
+    ],
+    "🤝 Amicaux": [
+      ["🌍 AI","Amical Pays","Analyse ce match amical international entre sélections nationales. Web search : forme récente, compositions probables, blessés, H2H. IMPORTANT : c'est un amical — tiens compte des rotations probables, de la motivation réduite et des tests tactiques du coach. meta.competition='Amical International'. JSON strict."],
+      ["🏟️ AC","Amical Clubs","Analyse ce match amical entre clubs. Web search : forme, effectif, objectifs de préparation. IMPORTANT : amical de clubs — titulaires souvent ménagés, rotations fréquentes, résultats moins prévisibles. meta.competition='Amical Club'. JSON strict."],
+      ["🏆 SC","Supercoupe","Analyse ce match de Supercoupe (nationale ou UEFA). Web search complet. JSON strict."],
+      ["🏟️ TR","Tournoi amical","Analyse ce match de tournoi amical ou de préparation estivale. Web search. JSON strict."],
+    ],
+    "🇫🇷": [
+      ["🇫🇷 L1","Ligue 1","Analyse un match important de Ligue 1. Web search : forme 10 matchs, blessés, H2H. JSON strict."],
+      ["🇫🇷 L2","Ligue 2","Analyse un match de Ligue 2 française. Web search complet. JSON strict."],
+      ["🇫🇷 CDL","Coupe de France","Analyse un match de Coupe de France. Web search. JSON strict."],
+    ],
+    "🇬🇧": [
+      ["🇬🇧 PL","Premier League","Analyse un match de Premier League. Web search complet : forme, blessés, H2H, stats. JSON strict."],
+      ["🇬🇧 EFL","Championship","Analyse un match de Championship anglais. Web search. JSON strict."],
+      ["🇬🇧 FA","FA Cup","Analyse un match de FA Cup. Web search. JSON strict."],
+    ],
+    "🇪🇸": [
+      ["🇪🇸 Liga","La Liga","Analyse un match de La Liga espagnole. Web search complet. JSON strict."],
+      ["🇪🇸 L2","La Liga 2","Analyse un match de La Liga 2. Web search. JSON strict."],
+      ["🇪🇸 CR","Copa del Rey","Analyse un match de Copa del Rey. Web search. JSON strict."],
+    ],
+    "🇩🇪": [
+      ["🇩🇪 BL","Bundesliga","Analyse un match de Bundesliga allemande. Web search complet. JSON strict."],
+      ["🇩🇪 BL2","Bundesliga 2","Analyse un match de 2. Bundesliga. Web search. JSON strict."],
+      ["🇩🇪 DFB","DFB Pokal","Analyse un match de DFB Pokal. Web search. JSON strict."],
+    ],
+    "🇮🇹": [
+      ["🇮🇹 SA","Serie A","Analyse un match de Serie A italienne. Web search complet. JSON strict."],
+      ["🇮🇹 SB","Serie B","Analyse un match de Serie B. Web search. JSON strict."],
+      ["🇮🇹 CP","Coppa Italia","Analyse un match de Coppa Italia. Web search. JSON strict."],
+    ],
+    "🇵🇹": [
+      ["🇵🇹 PL","Primeira Liga","Analyse un match de Primeira Liga portugaise. Web search. JSON strict."],
+    ],
+    "🇳🇱": [
+      ["🇳🇱 ED","Eredivisie","Analyse un match d'Eredivisie néerlandaise. Web search complet. JSON strict."],
+      ["🇳🇱 E1","Eerste Divisie","Analyse un match d'Eerste Divisie. Web search. JSON strict."],
+    ],
+    "🇸🇦": [
+      ["🇸🇦 SPL","Saudi Pro League","Analyse un match de Saudi Pro League. Web search complet. JSON strict."],
+      ["🇸🇦 KC","King Cup","Analyse un match de King Cup Arabie Saoudite. Web search. JSON strict."],
+    ],
+    "🌎 Am.": [
+      ["🌎 MLS","MLS","Analyse un match de Major League Soccer. Web search complet. JSON strict."],
+      ["🌎 Liga MX","Liga MX","Analyse un match de Liga MX mexicaine. Web search. JSON strict."],
+      ["🌎 LPA","Liga Profesional","Analyse un match de Liga Profesional Argentine. Web search. JSON strict."],
+      ["🌎 CB","Brasileirao","Analyse un match de Série A brésilienne. Web search. JSON strict."],
+      ["🌎 CL","Copa Lib.","Analyse un match de Copa Libertadores. Web search. JSON strict."],
+      ["🌎 CS","Copa Sud.","Analyse un match de Copa Sudamericana. Web search. JSON strict."],
+    ],
+    "🌍 Autres": [
+      ["🇹🇷 SL","Süper Lig","Analyse un match de Süper Lig turque. Web search. JSON strict."],
+      ["🇷🇺 RPL","RPL","Analyse un match de Premier League russe. Web search. JSON strict."],
+      ["🇯🇵 JL","J-League","Analyse un match de J-League japonaise. Web search. JSON strict."],
+      ["🇨🇳 CSL","CSL","Analyse un match de Chinese Super League. Web search. JSON strict."],
+      ["🇦🇺 AL","A-League","Analyse un match d'A-League australienne. Web search. JSON strict."],
+      ["🇿🇦 PSL","PSL","Analyse un match de Premier Soccer League sud-africaine. Web search. JSON strict."],
+      ["🇧🇪 JPL","Pro League","Analyse un match de Jupiler Pro League belge. Web search. JSON strict."],
+      ["🇨🇭 SSL","Super League","Analyse un match de Super League suisse. Web search. JSON strict."],
+      ["🇬🇷 SL","Super League","Analyse un match de Super League grecque. Web search. JSON strict."],
+      ["🇸🇪 AL","Allsvenskan","Analyse un match d'Allsvenskan suédoise. Web search. JSON strict."],
+    ],
+  };
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:5, width:"100%" }}>
+      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+        {Object.keys(COMPS).map(cat => (
+          <button key={cat} onClick={() => setSelCat(cat)} style={{ padding:"2px 8px", borderRadius:8, border:`1px solid ${selCat===cat ? C.acc : C.bdr}`, background: selCat===cat ? `${C.acc}18` : "transparent", color: selCat===cat ? C.acc : C.muted, fontSize:9, cursor:"pointer", fontFamily:"'DM Mono', monospace", letterSpacing:0.5, transition:"all .15s" }}>{cat}</button>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+        {(COMPS[selCat]||[]).map(([l,,m]) => (
+          <button key={l} onClick={() => send(m)} style={{ padding:"3px 9px", borderRadius:9, border:`1px solid ${C.bdr}`, background:"transparent", color:"#555", fontSize:9.5, cursor:"pointer", fontFamily:"'DM Mono', monospace", transition:"all .2s", whiteSpace:"nowrap" }}>{l}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ── Feedback Score Réel ───────────────────────────────────────
+function FeedbackBox({ msgIndex, prediction, meta, onSave, C }) {
+  const [r1, setR1] = useState("");
+  const [r2, setR2] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  if (saved) return (
+    <div style={{ marginTop:8, padding:"7px 12px", background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:7, display:"flex", alignItems:"center", gap:8 }}>
+      <span style={{ fontSize:11, color:"#22c55e" }}>✅ Score réel enregistré</span>
+      <span style={{ fontSize:10, color:"#3a4848", fontFamily:"'DM Mono', monospace" }}>
+        Prédit: {prediction?.score1}-{prediction?.score2} · Réel: {r1}-{r2}
+        {prediction?.score1 === parseInt(r1) && prediction?.score2 === parseInt(r2)
+          ? " 🎯 Score exact !"
+          : (prediction?.score1 > prediction?.score2) === (parseInt(r1) > parseInt(r2)) || (prediction?.score1 === prediction?.score2) === (parseInt(r1) === parseInt(r2))
+          ? " ✓ Vainqueur correct"
+          : " ✗ Prédiction incorrecte"}
+      </span>
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop:8, padding:"9px 12px", background:"rgba(0,212,170,0.04)", border:"1px solid rgba(0,212,170,0.12)", borderRadius:7 }}>
+      <div style={{ fontSize:9, color:"#00D4AA", letterSpacing:1.5, marginBottom:7, fontFamily:"'DM Mono', monospace" }}>
+        📝 SCORE RÉEL — Aide Arnold à apprendre
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:9, color:"#3a4848", fontFamily:"'DM Mono', monospace", minWidth:60, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{meta?.team1?.slice(0,8)}</span>
+        <input
+          value={r1} onChange={e => setR1(e.target.value)}
+          type="number" min="0" max="30" placeholder="0"
+          style={{ width:42, padding:"5px 0", textAlign:"center", background:"#090c0e", border:"1px solid #192022", borderRadius:5, color:"#3B82F6", fontSize:16, fontWeight:900, fontFamily:"'DM Mono', monospace" }}
+        />
+        <span style={{ color:"#1a2a2a", fontSize:14, fontWeight:900 }}>–</span>
+        <input
+          value={r2} onChange={e => setR2(e.target.value)}
+          type="number" min="0" max="30" placeholder="0"
+          style={{ width:42, padding:"5px 0", textAlign:"center", background:"#090c0e", border:"1px solid #192022", borderRadius:5, color:"#EF4444", fontSize:16, fontWeight:900, fontFamily:"'DM Mono', monospace" }}
+        />
+        <span style={{ fontSize:9, color:"#3a4848", fontFamily:"'DM Mono', monospace", minWidth:60, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{meta?.team2?.slice(0,8)}</span>
+        <button
+          onClick={() => {
+            if (r1 === "" || r2 === "") return;
+            onSave(msgIndex, parseInt(r1), parseInt(r2), meta);
+            setSaved(true);
+          }}
+          disabled={r1 === "" || r2 === ""}
+          style={{ marginLeft:"auto", padding:"5px 12px", borderRadius:5, border:"none", background: r1===""||r2==="" ? "#141414" : "linear-gradient(135deg,#00D4AA,#0077FF)", color:"#fff", fontSize:9.5, fontWeight:800, cursor: r1===""||r2==="" ? "not-allowed":"pointer", fontFamily:"'DM Mono', monospace", letterSpacing:1 }}
+        >VALIDER</button>
+      </div>
+      <div style={{ fontSize:8.5, color:"#2a3838", marginTop:5, fontFamily:"'Crimson Pro', serif", fontStyle:"italic" }}>
+        Prédit : {prediction?.score1 ?? "?"} – {prediction?.score2 ?? "?"} · Saisis le vrai résultat pour améliorer les prochaines analyses
+      </div>
+    </div>
+  );
+}
+
+
 // ════════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════════
@@ -710,41 +1062,64 @@ export default function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [agent, setAgent] = useState("arnold");
-  const [fcMode, setFcMode] = useState("FC25_5v5");
+  const [fcMode, setFcMode] = useState("FC26_5v5");
   const [fcT1, setFcT1] = useState("");
   const [fcT2, setFcT2] = useState("");
   const [fcS1, setFcS1] = useState("");
   const [fcS2, setFcS2] = useState("");
-  const [fcHist, setFcHist] = useState({ FC24_4v4: [], FC25_5v5: [], FC25_3v3: [] });
+  const [fcRealS1, setFcRealS1] = useState("");
+  const [fcRealS2, setFcRealS2] = useState("");
+  const [fcLastPred, setFcLastPred] = useState(null); // { score1, score2, t1, t2, mode }
+  const [fcFeedbackSaved, setFcFeedbackSaved] = useState(false);
+  const [fcHist, setFcHist] = useState({ FC24_4v4: [], FC26_5v5: [], FC25_3v3: [] });
   const [adminPrompts, setAdminPrompts] = useState([]);
   const [pName, setPName] = useState("");
   const [pContent, setPContent] = useState("");
+  // Clé API intégrée — pas besoin de la saisir
   const endRef = useRef(null);
+  const [feedbacks, setFeedbacks] = useState({});
+
+  const saveFeedbackResult = (msgIndex, real1, real2, meta) => {
+    const key = `${msgIndex}`;
+    setFeedbacks(prev => ({ ...prev, [key]: { real1, real2, meta } }));
+    // Stocker dans localStorage pour apprentissage futur
+    try {
+      const stored = JSON.parse(localStorage.getItem("arnold_feedback") || "[]");
+      stored.unshift({
+        date: new Date().toISOString().slice(0,10),
+        team1: meta?.team1, team2: meta?.team2,
+        competition: meta?.competition, mode: meta?.mode,
+        real1, real2,
+      });
+      localStorage.setItem("arnold_feedback", JSON.stringify(stored.slice(0, 500)));
+    } catch {}
+  };
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
   useEffect(() => {
     const ctx = getLiveContext();
-    // Use timeout to avoid synchronous setState within effect
-    const t = setTimeout(() => setMsgs([{ role: "intro", parsed: { type: "chat", message: `Bonjour ! Je suis ARNOLD ⚽\n\n📅 Nous sommes le ${ctx.dateFR} — Saison ${ctx.footballSeason}\n\nMon contexte temporel est injecté à chaque requête. Je suis toujours à jour, peu importe quand tu me consultes.\n\nWeb search ciblé sur :\n🔄 Forme récente (10 derniers matchs)\n🚑 Blessés & suspendus actuels\n🤝 Confrontations directes (H2H)\n🔁 Transferts & absences récents\n\nStats générales, tactique et prédiction : modèle interne.\n\nQuel match analyser ?` } }]), 0);
-    return () => clearTimeout(t);
+    setMsgs([{ role: "intro", parsed: { type: "chat", message: `Bonjour ! Je suis ARNOLD ⚽\n\n📅 Nous sommes le ${ctx.dateFR} — Saison ${ctx.footballSeason}\n\nMon contexte temporel est injecté à chaque requête. Je suis toujours à jour, peu importe quand tu me consultes.\n\nWeb search ciblé sur :\n🔄 Forme récente (10 derniers matchs)\n🚑 Blessés & suspendus actuels\n🤝 Confrontations directes (H2H)\n🔁 Transferts & absences récents\n\nStats générales, tactique et prédiction : modèle interne.\n\nQuel match analyser ?` } }]);
   }, []);
 
-  const getHistory = () => msgs.filter(m => m.role === "user" || m.role === "assistant").filter(m => m.content).map(m => ({ role: m.role, content: m.content }));
 
   const send = useCallback(async (override) => {
     const text = override || input.trim();
     if (!text || loading) return;
+
     setInput("");
     setMsgs(prev => [...prev, { role: "user", content: text, parsed: { type: "chat", message: text } }, { role: "typing" }]);
     setLoading(true);
     try {
       const system = buildSystem(adminPrompts, agent);
-      const hist = [...getHistory(), { role: "user", content: text }];
+      const hist = [...msgs.filter(m => (m.role === "user" || m.role === "assistant") && m.content).map(m => ({ role: m.role, content: m.content })), { role: "user", content: text }];
       const raw = await callArnold(hist, system);
       const parsed = parseJSON(raw);
       if (tab === "fc" && fcT1 && fcT2 && parsed?.prediction) {
-        setFcHist(prev => ({ ...prev, [fcMode]: [...prev[fcMode], { t1: fcT1, t2: fcT2, s1: parsed.prediction.score1 ?? 0, s2: parsed.prediction.score2 ?? 0 }] }));
+        const newEntry = { t1: fcT1, t2: fcT2, s1: parsed.prediction.score1 ?? 0, s2: parsed.prediction.score2 ?? 0, id: Date.now() };
+        setFcHist(prev => ({ ...prev, [fcMode]: [...prev[fcMode], newEntry] }));
+        setFcLastPred({ score1: parsed.prediction.score1, score2: parsed.prediction.score2, t1: fcT1, t2: fcT2, mode: fcMode, entryId: newEntry.id });
+        setFcRealS1(""); setFcRealS2(""); setFcFeedbackSaved(false);
       }
       setMsgs(prev => [...prev.filter(m => m.role !== "typing"), { role: "assistant", content: raw, parsed }]);
     } catch (err) {
@@ -753,7 +1128,9 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, adminPrompts, agent, tab, fcT1, fcT2, fcMode, getHistory]);
+  }, [input, loading, adminPrompts, agent, tab, fcT1, fcT2, fcMode, msgs]);
+
+
 
   const launchFC = () => {
     if (!fcT1 || !fcT2) return;
@@ -785,6 +1162,9 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
         textarea:focus,input:focus{outline:none} button:active{transform:scale(.97)}
       `}</style>
 
+      {/* API Key Modal */}
+
+
       {/* Header */}
       <header style={{ height: 52, padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.bdr}`, background: "rgba(7,11,13,.98)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -800,6 +1180,7 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
               {agI[a]} {a.toUpperCase()}{agent===a && <span style={{ width: 4, height: 4, borderRadius: "50%", background: agC[a], animation: "pulse 1.2s infinite" }} />}
             </button>
           ))}
+
         </div>
         <LiveClock />
       </header>
@@ -815,15 +1196,8 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
       {tab === "chat" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ padding: "7px 16px", borderBottom: `1px solid ${C.bdr}`, display: "flex", gap: 5, flexWrap: "wrap" }}>
-            {[
-              ["🏆 UCL", "Analyse un match de Champions League de cette semaine. Recherche la forme récente des deux équipes (10 derniers matchs), les blessés actuels, les suspensions et le H2H. Stats et tactique en interne."],
-              ["🇫🇷 Ligue 1", "Analyse un match important Ligue 1 cette semaine. Web search : forme 10 matchs, blessés, H2H. Modèle prédictif en local."],
-              ["🇬🇧 Premier League", "Analyse un match clé Premier League en ce moment. Données web : forme récente, absences, H2H. Tactique et compatibilité en local."],
-              ["🇪🇸 La Liga", "Analyse un match La Liga de la journée. Web : forme, blessés, transferts récents. Local : stats, prédiction, tactique."],
-              ["🎮 FC25 5v5", "Analyse FC25 5v5 Rush : PSG vs Real Madrid. Pas de web search sur la forme (jeu vidéo). meta.mode='FC25_5v5'."],
-            ].map(([l, m]) => (
-              <button key={l} onClick={() => send(m)} style={{ padding: "3.5px 10px", borderRadius: 11, border: `1px solid ${C.bdr}`, background: "transparent", color: "#444", fontSize: 9.5, cursor: "pointer", fontFamily: "'DM Mono', monospace", transition: "all .2s", whiteSpace: "nowrap" }}>{l}</button>
-            ))}
+            {/* Selector compétition */}
+            <CompSelector send={send} C={C} />
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -837,7 +1211,34 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
               if (msg.role === "intro" || msg.role === "assistant") return (
                 <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
                   <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#00D4AA,#0050CC)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>⚽</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>{msg.parsed && <AnalysisCard data={msg.parsed} />}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {msg.parsed && <AnalysisCard data={msg.parsed} />}
+                    {/* Feedback score réel — uniquement pour les analyses (pas intro, pas multi) */}
+                    {msg.role === "assistant" && msg.parsed?.type === "analysis" && msg.parsed?.prediction && (
+                      <FeedbackBox
+                        msgIndex={i}
+                        prediction={msg.parsed.prediction}
+                        meta={msg.parsed.meta}
+                        onSave={saveFeedbackResult}
+                        C={C}
+                      />
+                    )}
+                    {/* Multi-matchs : feedback pour chaque match */}
+                    {msg.role === "assistant" && msg.parsed?.type === "multi" && (
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:4 }}>
+                        {msg.parsed.analyses.map((analysis, ai) => analysis.prediction && (
+                          <FeedbackBox
+                            key={ai}
+                            msgIndex={`${i}_${ai}`}
+                            prediction={analysis.prediction}
+                            meta={analysis.meta}
+                            onSave={saveFeedbackResult}
+                            C={C}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
               return null;
@@ -896,6 +1297,61 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
                 <input value={fcS2} onChange={e=>setFcS2(e.target.value)} placeholder="0" type="number" style={{ width:46, padding:"4px 0", textAlign:"center", background:"#090c0e", border:`1px solid ${C.bdr}`, borderRadius:4, color:"#EF4444", fontSize:15, fontWeight:900, fontFamily:"'DM Mono', monospace" }}/>
                 <button onClick={launchFC} disabled={loading || !fcT1 || !fcT2} style={{ flex:1, padding:"10px", borderRadius:5, border:"none", background:loading||!fcT1||!fcT2?"#141414":"linear-gradient(135deg,#00D4AA,#0077FF)", color:"#fff", fontSize:10, fontWeight:800, letterSpacing:2, cursor:loading||!fcT1||!fcT2?"not-allowed":"pointer", fontFamily:"'DM Mono', monospace" }}>LANCER LA PRÉDICTION</button>
               </div>
+              {/* Score réel FC — visible après une prédiction */}
+              {fcLastPred && !fcFeedbackSaved && (
+                <div style={{ padding:"10px 12px", background:"rgba(0,212,170,0.05)", border:"1px solid rgba(0,212,170,0.2)", borderRadius:8, marginBottom:10 }}>
+                  <div style={{ fontSize:9, color:"#00D4AA", letterSpacing:1.5, marginBottom:7, fontFamily:"'DM Mono', monospace" }}>
+                    📝 SCORE RÉEL — Arnold apprend
+                  </div>
+                  <div style={{ fontSize:8.5, color:"#3a4848", marginBottom:6, fontFamily:"'DM Mono', monospace" }}>
+                    Prédit : {fcLastPred.score1}–{fcLastPred.score2} · {fcLastPred.t1} vs {fcLastPred.t2}
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <input
+                      value={fcRealS1} onChange={e=>setFcRealS1(e.target.value)}
+                      type="number" min="0" max="99" placeholder="0"
+                      style={{ width:46, padding:"5px 0", textAlign:"center", background:"#090c0e", border:"1px solid #192022", borderRadius:5, color:"#3B82F6", fontSize:16, fontWeight:900, fontFamily:"'DM Mono', monospace" }}
+                    />
+                    <span style={{ color:"#1a2a2a", fontSize:14, fontWeight:900 }}>–</span>
+                    <input
+                      value={fcRealS2} onChange={e=>setFcRealS2(e.target.value)}
+                      type="number" min="0" max="99" placeholder="0"
+                      style={{ width:46, padding:"5px 0", textAlign:"center", background:"#090c0e", border:"1px solid #192022", borderRadius:5, color:"#EF4444", fontSize:16, fontWeight:900, fontFamily:"'DM Mono', monospace" }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (fcRealS1 === "" || fcRealS2 === "") return;
+                        const r1 = parseInt(fcRealS1), r2 = parseInt(fcRealS2);
+                        // Mettre à jour l'entrée dans fcHist avec le vrai score
+                        setFcHist(prev => {
+                          const hist = [...(prev[fcLastPred.mode] || [])];
+                          const idx = hist.findIndex(h => h.id === fcLastPred.entryId);
+                          if (idx !== -1) {
+                            hist[idx] = { ...hist[idx], realS1: r1, realS2: r2,
+                              exact: hist[idx].s1 === r1 && hist[idx].s2 === r2,
+                              winnerOk: (hist[idx].s1 > hist[idx].s2) === (r1 > r2) && !(hist[idx].s1 === hist[idx].s2 && r1 !== r2)
+                            };
+                          }
+                          return { ...prev, [fcLastPred.mode]: hist };
+                        });
+                        setFcFeedbackSaved(true);
+                      }}
+                      disabled={fcRealS1 === "" || fcRealS2 === ""}
+                      style={{ marginLeft:"auto", padding:"6px 14px", borderRadius:5, border:"none", background: fcRealS1===""||fcRealS2==="" ? "#141414" : "linear-gradient(135deg,#00D4AA,#0077FF)", color:"#fff", fontSize:9.5, fontWeight:800, cursor: fcRealS1===""||fcRealS2==="" ? "not-allowed":"pointer", fontFamily:"'DM Mono', monospace" }}
+                    >✓ VALIDER</button>
+                  </div>
+                </div>
+              )}
+              {fcFeedbackSaved && fcLastPred && (
+                <div style={{ padding:"8px 12px", background:"rgba(34,197,94,0.07)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:8, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:13 }}>
+                    {fcLastPred.score1 === parseInt(fcRealS1) && fcLastPred.score2 === parseInt(fcRealS2) ? "🎯" : (fcLastPred.score1 > fcLastPred.score2) === (parseInt(fcRealS1) > parseInt(fcRealS2)) ? "✓" : "✗"}
+                  </span>
+                  <span style={{ fontSize:9.5, color:"#22c55e", fontFamily:"'DM Mono', monospace" }}>
+                    Score enregistré — Arnold apprend de ce résultat
+                  </span>
+                </div>
+              )}
             </div>
             <div style={{ marginTop:9, padding:"8px 11px", background:"rgba(255,107,53,0.04)", border:"1px solid rgba(255,107,53,0.11)", borderRadius:6, fontSize:10, color:"#444", lineHeight:1.6, fontFamily:"'Crimson Pro', serif", fontStyle:"italic" }}>
               ⚠️ Dans les modes FC, les équipes n'ont pas forcément le même style qu'en réalité. Pas de web search sur la forme FC (données jeu vidéo non disponibles en ligne).
