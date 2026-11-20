@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { AuthGate, PricingPanel } from "./Billing.jsx";
+import { authHeaders } from "./supabase.js";
 
 // ============================================================
 // ARNOLD FOOTBALL AI v5 — SÉCURISÉ + ROBUSTE
@@ -403,6 +405,7 @@ async function callArnold(messages, system) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(await authHeaders()),
         },
         body: JSON.stringify({
           model: "claude-haiku-5-5",
@@ -428,13 +431,18 @@ async function callArnold(messages, system) {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const errorMsg = errorData.error?.message || `Erreur HTTP ${res.status}`;
+        const errorMsg = errorData.error?.message || errorData.error || `Erreur HTTP ${res.status}`;
         // Retry sur erreurs serveur (5xx)
         if (res.status >= 500 && attempt < MAX_RETRIES) {
           await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
           continue;
         }
-        throw new Error(`Erreur API Anthropic: ${errorMsg}`);
+        // Erreurs définitives (connexion, quota, requête) : pas de nouvel essai
+        const e = new Error(
+          res.status === 401 || res.status === 402 ? errorMsg : `Erreur API Anthropic: ${errorMsg}`,
+        );
+        e.noRetry = true;
+        throw e;
       }
 
       const data = await res.json();
@@ -448,6 +456,7 @@ async function callArnold(messages, system) {
 
       return textContent;
     } catch (err) {
+      if (err.noRetry) throw err;
       // Ne pas retry sur les erreurs d'auth ou de syntaxe
       if (
         err.message.includes("Clé API") ||
@@ -2348,7 +2357,7 @@ function introMessage() {
 // ════════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════════
-export default function App() {
+function ArnoldApp() {
   const [tab, setTab] = useState("chat");
   const [msgs, setMsgs] = useState(() => [
     { role: "intro", parsed: { type: "chat", message: introMessage() } },
@@ -2609,6 +2618,7 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
       >
         {[
           ["chat", "💬 Analyse"],
+          ["abo", "💳 Abonnement"],
           ["fc", "🎮 Modes FC"],
           ["history", "📈 Historique"],
           ["admin", "⚙️ Admin"],
@@ -3213,6 +3223,7 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
         </div>
       )}
 
+      {tab === "abo" && <PricingPanel />}
       {/* HISTORY */}
       {tab === "history" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
@@ -3741,5 +3752,13 @@ Terrain : ${m.fieldSize} | Gardien : ${m.goalkeeper ? "Oui IA" : "Non"} | Corner
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthGate>
+      <ArnoldApp />
+    </AuthGate>
   );
 }

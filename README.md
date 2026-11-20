@@ -16,13 +16,27 @@ FC25 3v3, FC26 5v5). Les analyses sont générées par Claude via une route serv
 npm install
 ```
 
-## Variables d'environnement
+## Mise en service (abonnements)
 
-| Variable        | Où                       | Rôle                                         |
-| --------------- | ------------------------ | -------------------------------------------- |
-| `ANTHROPIC_KEY` | Serveur (Vercel / local) | Clé API Anthropic utilisée par `/api/arnold` |
+1. **Supabase** : créer un projet, puis exécuter `supabase/schema.sql` dans le SQL Editor.
+   Dans Authentication → URL Configuration, renseigner l'URL de l'app (Site URL et redirections).
+2. **Stripe** : créer une clé secrète, activer le XAF sur le compte, puis ajouter un webhook
+   vers `/api/payments/stripe-webhook` pour `checkout.session.completed` et `invoice.paid`.
+3. **CamPay** : récupérer `username` / `password` et la clé webhook de l'application ; configurer
+   l'URL `/api/payments/campay-webhook` dans le tableau de bord CamPay.
+4. Renseigner toutes les variables de `.env.example` dans Vercel.
 
-Ne jamais préfixer cette clé par `VITE_` : elle ne doit pas être exposée au navigateur.
+Pour tester en local avec les routes `/api` : `npx vercel dev` (`npm run dev` ne sert pas les fonctions).
+
+## Règles d'accès
+
+- **Gratuit** : 2 analyses par jour (jour UTC).
+- **Pass 5 jours** : 4 analyses valables 5 jours, 2 000 XAF (paiement unique, carte ou Mobile Money).
+- **Mensuel** : 10 analyses valables 30 jours, 13 000 XAF. Renouvellement automatique par carte ;
+  par Mobile Money (pas de prélèvement récurrent), il faut repayer chaque mois.
+
+Les clés `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY` et `CAMPAY_*` ne doivent jamais être
+préfixées par `VITE_` : elles restent côté serveur.
 
 ## Scripts
 
@@ -48,4 +62,4 @@ public/              Favicon et ressources statiques
 
 - L'historique des feedbacks (scores réels saisis par l'utilisateur) est stocké dans
   `localStorage` et résumé dans le prompt système, avec le taux de vainqueurs prédits justes.
-- Le modèle utilisé est défini dans `src/App.jsx` (`callArnold`).
+- Le modèle est fixé côté serveur (`api/arnold.js`) : le client ne peut pas le choisir.
