@@ -1,16 +1,51 @@
-# React + Vite
+# ARNOLD · Football Intelligence AI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Application React (Vite) d'analyse de matchs de football : prédictions de score,
+statistiques, confrontations directes, blessés/suspendus et modes FC (FC24 4v4,
+FC25 3v3, FC26 5v5). Les analyses sont générées par Claude via une route serveur.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 18 + Vite 7
+- Route serverless `api/arnold.js` (proxy vers l'API Anthropic, clé gardée côté serveur)
+- ESLint 9 (config plate) et Prettier 3
 
-## React Compiler
+## Installation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+```
 
-## Expanding the ESLint configuration
+## Variables d'environnement
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| Variable        | Où                       | Rôle                                         |
+| --------------- | ------------------------ | -------------------------------------------- |
+| `ANTHROPIC_KEY` | Serveur (Vercel / local) | Clé API Anthropic utilisée par `/api/arnold` |
+
+Ne jamais préfixer cette clé par `VITE_` : elle ne doit pas être exposée au navigateur.
+
+## Scripts
+
+| Commande               | Effet                                      |
+| ---------------------- | ------------------------------------------ |
+| `npm run dev`          | Serveur de développement Vite              |
+| `npm run build`        | Build de production dans `dist/`           |
+| `npm run preview`      | Prévisualisation du build                  |
+| `npm run lint`         | ESLint sur tout le projet                  |
+| `npm run format`       | Formatage Prettier (`src`, `api`, configs) |
+| `npm run format:check` | Vérifie le formatage sans modifier         |
+
+## Structure
+
+```
+api/arnold.js        Route serverless → API Anthropic
+src/App.jsx          Interface, prompt système, modes FC, historique
+src/main.jsx         Point d'entrée React
+public/              Favicon et ressources statiques
+```
+
+## Remarques
+
+- L'historique des feedbacks (scores réels saisis par l'utilisateur) est stocké dans
+  `localStorage` et résumé dans le prompt système, avec le taux de vainqueurs prédits justes.
+- Le modèle utilisé est défini dans `src/App.jsx` (`callArnold`).
